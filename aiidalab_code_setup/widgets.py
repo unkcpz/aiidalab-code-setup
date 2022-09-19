@@ -94,11 +94,11 @@ class CodeSetupWidget(ipw.VBox):
 
     def __init__(self, **kwargs):
         
-        binary_install = BinaryInstallWidget()
+        self.binary_install = BinaryInstallWidget()
 
         super().__init__(
             [
-                binary_install,
+                self.binary_install,
                 # plugin_code_setup,
             ],
             **kwargs,
@@ -122,6 +122,7 @@ class BinaryInstallWidget(ipw.VBox):
         code_selector.observe(self._code_selected, names='value')
         
         install_button = ipw.Button(
+            icon="cogs",
             description="Install",
             disabled=False,
         )
@@ -144,7 +145,7 @@ class BinaryInstallWidget(ipw.VBox):
         self._reinstall_button = ipw.Button(
             icon="cogs",
             disabled=True,
-            description="Install codes...",
+            description="Reinstall",
             tooltip="Start another installation attempt.",
         )
         self._reinstall_button.on_click(self._trigger_reinstall)
@@ -153,6 +154,7 @@ class BinaryInstallWidget(ipw.VBox):
             children=[
                 code_selector,
                 install_button,
+                self._reinstall_button,
                 ipw.HBox(
                     [self._progress_bar, self._info_toggle_button],
                     layout=ipw.Layout(width="auto"),
@@ -174,7 +176,13 @@ class BinaryInstallWidget(ipw.VBox):
         return ""
         
     def _code_selected(self, change):
-        self.code = change['new']
+        if change['new']:
+            self.code = change["new"]
+            _, package_name, version = CODE_DB.get(self.code)
+            
+            if code_is_installed(package_name, version):
+                self.set_trait("installed", True)
+            
         
     def set_message(self, msg):
         self._progress_bar.description = f"{msg}"
@@ -219,23 +227,22 @@ class BinaryInstallWidget(ipw.VBox):
             below.</p>
             """
             self._info_toggle_button.disabled = not bool(change["new"])
-            self._reinstall_button.disabled = not bool(change["new"])
             if not change["new"]:
                 self._info_toggle_button.value = False
             
     def _toggle_error_view(self, change):
-        self.children = [self.children[0]] + (
-            [self._error_output, self._reinstall_button] if change["new"] else []
+        self.children += (
+            [self._error_output] if change["new"] else []
         )
         
     @traitlets.observe("busy")
     @traitlets.observe("error")
     @traitlets.observe("installed")
-    def _update(self, _):
+    def _update(self, change):
         with self.hold_trait_notifications():
-
             if self.error or self.installed:
                 self._progress_bar.value = 1.0
+                self._reinstall_button.disabled = False
             elif self.busy:
                 self._progress_bar.value = ProgressBar.AnimationRate(1.0)
             else:
